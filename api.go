@@ -1,0 +1,579 @@
+package main
+
+import (
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"io"
+	"log"
+	"net"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type server struct {
+	cfg        *config
+	store      *store
+	blob       blobStore    // 附件字节存储（local 驱动）
+	rl         *rateLimiter // 登录/注册等敏感公开接口
+	pullRl     *rateLimiter // Agent 拉取任务，阈值宽松
+	agentRl    *rateLimiter // Agent 侧全部接口的 IP 级兜底限流（含无效令牌洪泛防护）
+	sessionKey string       // 会话签名密钥，持久化在 settings 表
+	broker     *sseBroker   // 管理端 SSE 实时事件分发；测试可为 nil
+}
+
+// agentRLAllow 是 agentRl 的 nil 安全入口（测试可不装配）。
+func (s *server) agentRLAllow(ip string) bool {
+	return s.agentRl == nil || s.agentRl.allow("agent:"+ip)
+}
+
+func writeJSON(w http.ResponseWriter, code int, v any) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(code)
+	_ = json.NewEncoder(w).Encode(v)
+}
+
+func writeError(w http.ResponseWriter, code int, msg string) {
+	writeJSON(w, code, map[string]string{"error": msg})
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		writeError(w, http.StatusBadRequest, "请求体不是合法 JSON")
+		return false
+	}
+	return true
+}
+
+// isTrustedProxy 判定 TCP 对端是否为可信反向代理。
+// TrustProxy=true 一律信任；=false 一律不信任；auto（默认）仅当对端是
+// 回环/内网地址时信任——直连公网（典型 VPS 裸奔部署）时 X-Forwarded-For
+// 由客户端任意伪造，绝不能采信，否则限流可被轮换伪造 IP 完全绕过。
+func (s *server) isTrustedProxy(r *http.Request) bool {
+	switch s.cfg.TrustProxy {
+	case "true":
+		return true
+	case "false":
+		return false
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast()
+}
+
+// clientIP 返回限流与记录用的客户端地址。仅当对端是可信反代时才采信
+// X-Forwarded-For（取最右一段：每一跳可信代理把真实对端追加到末尾，
+// 客户端自带的伪造段留在左侧）；否则用 TCP 对端地址，伪造不了。
+func (s *server) clientIP(r *http.Request) string {
+	if s.isTrustedProxy(r) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if i := strings.LastIndex(xff, ","); i >= 0 {
+				if v := strings.TrimSpace(xff[i+1:]); v != "" {
+					return v
+				}
+			}
+			if v := strings.TrimSpace(xff); v != "" {
+				return v
+			}
+		}
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
+	return host
+}
+
+// requestIsHTTPS 判定用户侧连接是否为 HTTPS：本机 TLS，或经可信反代
+// 转发且 X-Forwarded-Proto 为 https（决定 Cookie Secure 与 HSTS）。
+func (s *server) requestIsHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	return s.isTrustedProxy(r) && r.Header.Get("X-Forwarded-Proto") == "https"
+}
+
+// clean 去掉控制字符并限制长度（按字符数截断，不会切断多字节字符）。
+func clean(s string, max int) string {
+	s = strings.TrimSpace(s)
+	var b strings.Builder
+	for _, r := range s {
+		if r < 0x20 {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	r := []rune(b.String())
+	if len(r) > max {
+		return string(r[:max])
+	}
+	return string(r)
+}
+
+func (s *server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("Referrer-Policy", "same-origin")
+		// script-src 带 unsafe-eval：Vue 3 全球构建版在浏览器内编译 in-DOM 模板依赖 new Function；
+		// 脚本本体仍仅限本站，eval 面只暴露给登录后的单管理员会话
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-eval'; img-src 'self' data:")
+		// 用户侧确为 HTTPS 时才声明 HSTS：纯 HTTP 内网访问不受影响
+		if s.requestIsHTTPS(r) {
+			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "time": time.Now().Unix(), "version": version})
+}
+
+// handleSetupScript 下发一键接入脚本。公开接口：脚本本身不含任何密钥，
+// 令牌由 Agent 在执行时通过环境变量传入。
+func (s *server) handleSetupScript(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = io.WriteString(w, strings.ReplaceAll(setupScript, "{{BASE_URL}}", s.baseURL()))
+}
+
+// ---- 公开接口（Agent 侧） ----
+
+func (s *server) handleRegister(w http.ResponseWriter, r *http.Request) {
+	ip := s.clientIP(r)
+	if !s.rl.allow("register:" + ip) {
+		writeError(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		return
+	}
+	var req struct {
+		Token    string `json:"token"`
+		Name     string `json:"name"`
+		Hostname string `json:"hostname"`
+		OS       string `json:"os"`
+		Arch     string `json:"arch"`
+		Meta     string `json:"meta"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Name, req.Hostname, req.OS, req.Arch = clean(req.Name, 64), clean(req.Hostname, 128), clean(req.OS, 32), clean(req.Arch, 32)
+	if !strings.HasPrefix(req.Token, "ame_") || req.Name == "" {
+		writeError(w, http.StatusBadRequest, "缺少有效的 token 或 name")
+		return
+	}
+	if req.Meta != "" && (len(req.Meta) > 2048 || !validMeta(req.Meta)) {
+		writeError(w, http.StatusBadRequest, "meta 必须是 2KB 以内的 JSON 对象")
+		return
+	}
+	// 单事务原子注册：核销令牌 + 名称查重 + 建 Agent。重名时整体回滚，
+	// 令牌保持有效，换名即可重试；也不会把无效令牌的存在性泄露为名称信息。
+	a, raw, err := s.store.registerAgent(req.Token, req.Name, req.Hostname, req.OS, req.Arch, ip, req.Meta)
+	switch {
+	case errors.Is(err, errInvalidToken):
+		writeError(w, http.StatusUnauthorized, "注册令牌无效、已使用或已过期")
+		return
+	case errors.Is(err, errNameTaken):
+		writeError(w, http.StatusConflict, "登记名称已被占用，请换一个 AM_NAME 重试")
+		return
+	case err != nil:
+		log.Printf("创建 Agent 失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	log.Printf("Agent 注册成功: %s (%s) 来自 %s", a.Name, a.ID, ip)
+	s.publish("agents")
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"agent_id":           a.ID,
+		"heartbeat_token":    raw,
+		"heartbeat_interval": s.store.pollInterval(),
+		"server_time":        time.Now().Unix(),
+	})
+}
+
+func (s *server) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	// IP 级兜底限流：无效令牌洪泛每次都要打一次数据库哈希查询，必须挡在门外。
+	// 阈值按「单 IP 挂满一个机群的合法心跳」预留，正常使用不受影响。
+	if !s.agentRLAllow(s.clientIP(r)) {
+		writeError(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		return
+	}
+	token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok || !strings.HasPrefix(token, "amh_") {
+		writeError(w, http.StatusUnauthorized, "缺少心跳令牌")
+		return
+	}
+	a, err := s.store.agentByToken(token)
+	if err != nil {
+		// 命中下线墓碑：返回 410，Agent 端 heartbeat.sh 据此自卸载
+		if decom, derr := s.store.isDecommissioned(token); derr == nil && decom {
+			writeJSON(w, http.StatusGone, map[string]any{"uninstall": true})
+			return
+		}
+		writeError(w, http.StatusUnauthorized, "心跳令牌无效")
+		return
+	}
+	var meta string
+	// ContentLength 判定用 != 0：chunked 传输时为 -1，用 > 0 会把整类请求的 meta 静默丢掉
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") && r.ContentLength != 0 {
+		var req struct {
+			Meta string `json:"meta"`
+		}
+		if !decodeJSON(w, r, &req) {
+			return
+		}
+		if req.Meta != "" && (len(req.Meta) > 2048 || !validMeta(req.Meta)) {
+			writeError(w, http.StatusBadRequest, "meta 必须是 2KB 以内的 JSON 对象")
+			return
+		}
+		meta = req.Meta
+	}
+	if err := s.store.touchHeartbeat(a.ID, s.clientIP(r), meta); err != nil {
+		log.Printf("更新心跳失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	// 心跳即活性信号：推给管理端，看板在线灯即时翻转（publish 非阻塞，热路径无负担）
+	s.publish("agents")
+	// 随心跳下发全局轮询间隔：Agent 侧 heartbeat.sh 据此机械调整本机定时任务
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":            true,
+		"server_time":   time.Now().Unix(),
+		"poll_interval": s.store.pollInterval(),
+	})
+}
+
+// ---- 管理端接口 ----
+
+// handleAuthStatus 向 WebUI 报告认证状态：是否需要初始化、是否启用令牌应急登录。
+func (s *server) handleAuthStatus(w http.ResponseWriter, _ *http.Request) {
+	has, err := s.store.hasAdmin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"needs_setup": !has,
+		"env_login":   s.cfg.AdminToken != "",
+		"base_url":    s.baseURL(),
+		"version":     version,
+	})
+}
+
+// baseURL 返回生效的平台对外地址：WebUI 设置优先，其次环境变量/默认值。
+func (s *server) baseURL() string {
+	if v, err := s.store.getSetting("base_url"); err == nil && v != "" {
+		return v
+	}
+	return s.cfg.BaseURL
+}
+
+// normalizeBaseURL 校验并规范化平台地址。除 URL 合法性外，拒绝空白、引号、
+// 反引号、反斜杠与控制字符——该地址会原样嵌入接入提示词、Agent 侧 shell
+// 脚本与本地 config（被 source 执行），这些字符注入后可破坏脚本甚至改写语义。
+func normalizeBaseURL(s string) (string, error) {
+	s = strings.TrimRight(strings.TrimSpace(s), "/")
+	if s == "" {
+		return "", errors.New("平台地址不能为空")
+	}
+	if !strings.HasPrefix(s, "http://") && !strings.HasPrefix(s, "https://") {
+		return "", errors.New("平台地址必须以 http:// 或 https:// 开头")
+	}
+	for _, r := range s {
+		if r < 0x21 || r > 0x7e || strings.ContainsRune("\"'`\\$;<>&@", r) {
+			return "", errors.New("平台地址含非法字符（空白、引号或控制字符）")
+		}
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return "", errors.New("平台地址不是合法 URL")
+	}
+	return s, nil
+}
+
+// handleGetSettings 返回当前设置（管理端）。
+func (s *server) handleGetSettings(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"base_url":      s.baseURL(),
+		"version":       version,
+		"poll_interval": s.store.pollInterval(),
+	})
+}
+
+// handleUpdateSettings 更新设置（管理端）：平台地址 + 全局轮询间隔（秒）。
+// 轮询间隔随每次心跳下发，各 Agent 实例一分钟内机械跟进，无需重新接入。
+func (s *server) handleUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		BaseURL      string `json:"base_url"`
+		PollInterval *int   `json:"poll_interval"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	u, err := normalizeBaseURL(req.BaseURL)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.PollInterval != nil && (*req.PollInterval < 10 || *req.PollInterval > 3600) {
+		writeError(w, http.StatusBadRequest, "轮询间隔需在 10-3600 秒之间")
+		return
+	}
+	if err := s.store.setSetting("base_url", u); err != nil {
+		log.Printf("保存设置失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	if req.PollInterval != nil {
+		if err := s.store.setSetting("poll_interval", strconv.Itoa(*req.PollInterval)); err != nil {
+			log.Printf("保存轮询间隔失败: %v", err)
+			writeError(w, http.StatusInternalServerError, "内部错误")
+			return
+		}
+		log.Printf("轮询间隔已更新: %ds", *req.PollInterval)
+	}
+	log.Printf("平台地址已更新: %s", u)
+	s.publish("settings")
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "base_url": u, "poll_interval": s.store.pollInterval()})
+}
+
+// handleSetup 首次访问初始化管理员账号，仅在无任何账号时可用。
+func (s *server) handleSetup(w http.ResponseWriter, r *http.Request) {
+	if !s.rl.allow("setup:" + s.clientIP(r)) {
+		writeError(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		return
+	}
+	has, err := s.store.hasAdmin()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	if has {
+		writeError(w, http.StatusForbidden, "管理员账号已存在，请直接登录")
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		BaseURL  string `json:"base_url"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	req.Username = clean(req.Username, 32)
+	if !validUsername(req.Username) {
+		writeError(w, http.StatusBadRequest, "账号需 2-32 位，仅限字母、数字、_ . -")
+		return
+	}
+	if len(req.Password) < 8 || len(req.Password) > 128 {
+		writeError(w, http.StatusBadRequest, "密码长度需 8-128 位")
+		return
+	}
+	if req.BaseURL != "" {
+		u, err := normalizeBaseURL(req.BaseURL)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := s.store.setSetting("base_url", u); err != nil {
+			writeError(w, http.StatusInternalServerError, "内部错误")
+			return
+		}
+	}
+	hash, err := hashPassword(req.Password)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	if err := s.store.createAdmin(req.Username, hash); err != nil {
+		// 并发初始化竞态兜底：另一个请求抢先建号时唯一键冲突，按已存在处理
+		if again, _ := s.store.hasAdmin(); again {
+			writeError(w, http.StatusForbidden, "管理员账号已存在，请直接登录")
+			return
+		}
+		log.Printf("创建管理员失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	log.Printf("管理员账号已初始化: %q", req.Username)
+	s.setSessionCookie(w, r)
+	writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
+}
+
+func (s *server) handleLogin(w http.ResponseWriter, r *http.Request) {
+	if !s.rl.allow("login:" + s.clientIP(r)) {
+		writeError(w, http.StatusTooManyRequests, "请求过于频繁，请稍后再试")
+		return
+	}
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Token    string `json:"token"` // 应急通道：AGENT_MATRIX_ADMIN_TOKEN
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	// 应急令牌通道（仅当配置了环境变量时开放）
+	if req.Token != "" && s.cfg.AdminToken != "" &&
+		subtle.ConstantTimeCompare([]byte(req.Token), []byte(s.cfg.AdminToken)) == 1 {
+		s.setSessionCookie(w, r)
+		writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+		return
+	}
+	// 账号密码通道
+	if req.Username != "" || req.Password != "" {
+		hash, err := s.store.adminPasswordHash(clean(req.Username, 32))
+		if err == nil && verifyPassword(req.Password, hash) {
+			s.setSessionCookie(w, r)
+			writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+			return
+		}
+	}
+	writeError(w, http.StatusUnauthorized, "账号或密码错误")
+}
+
+// handleAutoLogin 是浏览器侧的应急登录端点：?token=XXX 通过后 set session cookie 并 302 回首页。
+// 仅在 cfg.AdminToken 配置时启用；本地 demo / 截图脚本使用，生产环境禁用。
+func (s *server) handleAutoLogin(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.AdminToken == "" {
+		http.Error(w, "应急登录未启用", http.StatusNotFound)
+		return
+	}
+	tok := r.URL.Query().Get("token")
+	if tok == "" || subtle.ConstantTimeCompare([]byte(tok), []byte(s.cfg.AdminToken)) != 1 {
+		http.Error(w, "token 不正确", http.StatusUnauthorized)
+		return
+	}
+	if !s.rl.allow("auto-login:"+s.clientIP(r)) {
+		http.Error(w, "rate limit", http.StatusTooManyRequests)
+		return
+	}
+	s.setSessionCookie(w, r)
+	http.Redirect(w, r, "/", http.StatusFound)
+}
+
+// setSessionCookie 种下 7 天有效的会话 Cookie。Secure 按用户侧连接判定：
+// 本机 TLS 或可信反代转发 X-Forwarded-Proto: https 时启用。
+func (s *server) setSessionCookie(w http.ResponseWriter, r *http.Request) {
+	exp := time.Now().Add(sessionTTL).Unix()
+	http.SetCookie(w, &http.Cookie{
+		Name:     sessionCookie,
+		Value:    s.sessionValue(exp),
+		Path:     "/",
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.requestIsHTTPS(r),
+		Expires:  time.Unix(exp, 0),
+	})
+}
+
+// validUsername 限制账号字符集，避免界面注入与日志污染。
+func validUsername(s string) bool {
+	if len(s) < 2 || len(s) > 32 {
+		return false
+	}
+	for _, r := range s {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') ||
+			r == '_' || r == '.' || r == '-'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func (s *server) handleLogout(w http.ResponseWriter, _ *http.Request) {
+	// 会话撤销：递增纪元使全部已签发的会话 Cookie 立即失效（含其他浏览器
+	// 里打开的会话），再清掉本次的 Cookie。仅清 Cookie 挡不住泄露的令牌。
+	if err := s.store.bumpSessionEpoch(); err != nil {
+		log.Printf("会话纪元更新失败: %v", err)
+	}
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, MaxAge: -1,
+	})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *server) handleListAgents(w http.ResponseWriter, _ *http.Request) {
+	agents, err := s.store.listAgents()
+	if err != nil {
+		log.Printf("查询 Agent 列表失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	type view struct {
+		Agent
+		Online bool `json:"online"`
+	}
+	now := time.Now().Unix()
+	timeout := int64(s.cfg.OnlineTimeout.Seconds())
+	out := make([]view, 0, len(agents))
+	for _, a := range agents {
+		out = append(out, view{Agent: a, Online: now-a.LastSeen <= timeout})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"agents":         out,
+		"online_timeout": timeout,
+		"server_time":    now,
+	})
+}
+
+// handleDeleteAgent 下线 Agent：取消未结束指派、清理产出附件、记录转墓碑（其
+// 下次心跳将收到 410 并自卸载），最后删除记录。列表中立即消失。
+func (s *server) handleDeleteAgent(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if !strings.HasPrefix(id, "am_") {
+		writeError(w, http.StatusBadRequest, "无效的 Agent ID")
+		return
+	}
+	if err := s.store.cancelOpenAssignmentsForAgent(id); err != nil {
+		log.Printf("取消 Agent 未结束指派失败 (%s): %v", id, err)
+	}
+	s.deleteAttachmentsOfAgent(id)
+	err := s.store.decommissionAgent(id)
+	switch {
+	case errors.Is(err, errAgentNotFound):
+		writeError(w, http.StatusNotFound, "Agent 不存在")
+		return
+	case err != nil:
+		log.Printf("下线 Agent 失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	log.Printf("Agent 已下线: %s（令牌已转墓碑，等待其自卸载）", id)
+	s.publish("agents")
+	s.publish("tasks") // 未结束指派已随之取消，任务状态会变
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+func (s *server) handleCreateEnrollment(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Label string `json:"label"`
+	}
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	label := clean(req.Label, 64)
+	token, exp, err := s.store.createEnrollment(label, 24*time.Hour)
+	if err != nil {
+		log.Printf("生成注册令牌失败: %v", err)
+		writeError(w, http.StatusInternalServerError, "内部错误")
+		return
+	}
+	log.Printf("生成一次性注册令牌，备注: %q", label)
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"token":      token,
+		"expires_at": exp,
+		"prompt":     buildPrompt(s.baseURL(), label, token),
+	})
+}

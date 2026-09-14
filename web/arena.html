@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agent Battle · Multi-Agent Arena</title>
+  <link rel="stylesheet" href="/arena.css" />
+  <script src="/vendor/vue.global.prod.js"></script>
+  <script src="/vendor/marked.min.js"></script>
+  <script src="/vendor/purify.min.js"></script>
+</head>
+<body>
+  <div id="app" v-cloak>
+
+    <!-- ════════ SVG Sprites(复用的火柴人 / 武器)═══════ -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <!-- 火柴人 - 持剑 -->
+        <symbol id="fig-sword" viewBox="0 0 60 80">
+          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
+            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="30" y1="21" x2="30" y2="52"/>
+            <line x1="30" y1="28" x2="50" y2="22"/>
+            <line x1="50" y1="22" x2="56" y2="14"/>
+            <line x1="56" y1="14" x2="58" y2="16"/>
+            <line x1="56" y1="14" x2="52" y2="18"/>
+            <line x1="30" y1="28" x2="14" y2="40"/>
+            <line x1="30" y1="52" x2="20" y2="76"/>
+            <line x1="30" y1="52" x2="40" y2="76"/>
+            <!-- 剑刃光 -->
+            <line x1="50" y1="22" x2="56" y2="14" stroke="var(--warn)" stroke-width="2.5"/>
+          </g>
+        </symbol>
+
+        <!-- 火柴人 - 持法杖 -->
+        <symbol id="fig-staff" viewBox="0 0 60 80">
+          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
+            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="30" y1="21" x2="30" y2="52"/>
+            <line x1="30" y1="28" x2="14" y2="40"/>
+            <line x1="30" y1="28" x2="20" y2="8"/>
+            <circle cx="20" cy="6" r="4" fill="var(--cyan)" stroke="var(--cyan)"/>
+            <circle cx="20" cy="6" r="2" fill="var(--bg)"/>
+            <line x1="30" y1="52" x2="20" y2="76"/>
+            <line x1="30" y1="52" x2="40" y2="76"/>
+          </g>
+        </symbol>
+
+        <!-- 火柴人 - 持盾 -->
+        <symbol id="fig-shield" viewBox="0 0 60 80">
+          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
+            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="30" y1="21" x2="30" y2="52"/>
+            <line x1="30" y1="28" x2="48" y2="30"/>
+            <!-- 盾 -->
+            <path d="M48 24 L56 28 L56 42 L48 46 Z" fill="var(--warn)" stroke="var(--warn-hi)"/>
+            <line x1="48" y1="28" x2="56" y2="42" stroke="var(--bg)" stroke-width="1"/>
+            <line x1="30" y1="28" x2="12" y2="40"/>
+            <line x1="30" y1="52" x2="20" y2="76"/>
+            <line x1="30" y1="52" x2="40" y2="76"/>
+          </g>
+        </symbol>
+
+        <!-- 火柴人 - 持弓 -->
+        <symbol id="fig-bow" viewBox="0 0 60 80">
+          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
+            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="30" y1="21" x2="30" y2="52"/>
+            <line x1="30" y1="28" x2="12" y2="40"/>
+            <!-- 弓 -->
+            <path d="M44 22 Q52 35 44 48" stroke="var(--xp)" stroke-width="2"/>
+            <line x1="44" y1="22" x2="44" y2="48" stroke="var(--ink-2)" stroke-width="0.5"/>
+            <line x1="30" y1="52" x2="20" y2="76"/>
+            <line x1="30" y1="52" x2="40" y2="76"/>
+          </g>
+        </symbol>
+
+        <!-- 火柴人 - 双拳 -->
+        <symbol id="fig-fist" viewBox="0 0 60 80">
+          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
+            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
+            <line x1="30" y1="21" x2="30" y2="52"/>
+            <line x1="30" y1="28" x2="14" y2="22"/>
+            <line x1="30" y1="28" x2="46" y2="22"/>
+            <circle cx="12" cy="20" r="4" fill="var(--red)" stroke="var(--red)"/>
+            <circle cx="48" cy="20" r="4" fill="var(--red)" stroke="var(--red)"/>
+            <line x1="30" y1="52" x2="20" y2="76"/>
+            <line x1="30" y1="52" x2="40" y2="76"/>
+          </g>
+        </symbol>
+
+        <!-- 皇冠 -->
+        <symbol id="crown" viewBox="0 0 24 24">
+          <g fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round">
+            <path d="M3 8 L7 14 L12 6 L17 14 L21 8 L20 19 L4 19 Z"/>
+            <circle cx="3" cy="8" r="1.5"/>
+            <circle cx="12" cy="6" r="1.5"/>
+            <circle cx="21" cy="8" r="1.5"/>
+            <circle cx="3" cy="19" r="1"/>
+            <circle cx="9" cy="19" r="1"/>
+            <circle cx="15" cy="19" r="1"/>
+            <circle cx="21" cy="19" r="1"/>
+          </g>
+        </symbol>
+
+        <!-- 交叉双剑 logo -->
+        <symbol id="brand-mark" viewBox="0 0 32 32">
+          <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="6" y1="6" x2="22" y2="22" stroke="var(--warn)"/>
+            <line x1="6" y1="6" x2="10" y2="4" stroke="var(--warn)"/>
+            <line x1="6" y1="6" x2="4" y2="10" stroke="var(--warn)"/>
+            <line x1="22" y1="22" x2="26" y2="24" stroke="var(--warn)"/>
+            <line x1="22" y1="22" x2="24" y2="18" stroke="var(--warn)"/>
+            <line x1="6" y1="10" x2="10" y2="6" stroke="var(--warn)"/>
+            <line x1="22" y1="18" x2="26" y2="22" stroke="var(--warn)"/>
+            <line x1="26" y1="6" x2="10" y2="22" stroke="var(--cyan)"/>
+            <line x1="26" y1="6" x2="22" y2="4" stroke="var(--cyan)"/>
+            <line x1="26" y1="6" x2="28" y2="10" stroke="var(--cyan)"/>
+            <line x1="10" y1="22" x2="6" y2="24" stroke="var(--cyan)"/>
+            <line x1="10" y1="22" x2="8" y2="18" stroke="var(--cyan)"/>
+            <line x1="26" y1="10" x2="22" y2="6" stroke="var(--cyan)"/>
+            <line x1="10" y1="18" x2="6" y2="22" stroke="var(--cyan)"/>
+          </g>
+        </symbol>
+
+        <!-- 4v4 战斗场景(Hero) -->
+        <symbol id="battle-scene" viewBox="0 0 220 160">
+          <g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+            <!-- 地面线 -->
+            <line x1="10" y1="130" x2="210" y2="130" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="4 4"/>
+            <!-- 左队 4 个 -->
+            <g transform="translate(15 50)">
+              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
+              <line x1="10" y1="16" x2="10" y2="50"/>
+              <line x1="10" y1="22" x2="22" y2="18" stroke="var(--warn)"/>
+              <line x1="22" y1="18" x2="28" y2="12" stroke="var(--warn)" stroke-width="2"/>
+              <line x1="10" y1="22" x2="-2" y2="32"/>
+              <line x1="10" y1="50" x2="2" y2="78"/>
+              <line x1="10" y1="50" x2="18" y2="78"/>
+            </g>
+            <g transform="translate(40 55)">
+              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
+              <line x1="10" y1="16" x2="10" y2="50"/>
+              <line x1="10" y1="22" x2="-4" y2="14" stroke="var(--cyan)"/>
+              <circle cx="-6" cy="12" r="3" fill="var(--cyan)"/>
+              <line x1="10" y1="22" x2="22" y2="32"/>
+              <line x1="10" y1="50" x2="2" y2="78"/>
+              <line x1="10" y1="50" x2="18" y2="78"/>
+            </g>
+            <!-- 右队 4 个 -->
+            <g transform="translate(160 50)">
+              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
+              <line x1="10" y1="16" x2="10" y2="50"/>
+              <line x1="10" y1="22" x2="-2" y2="18" stroke="var(--red)"/>
+              <circle cx="-4" cy="16" r="3" fill="var(--red)"/>
+              <line x1="10" y1="22" x2="22" y2="32"/>
+              <line x1="10" y1="50" x2="2" y2="78"/>
+              <line x1="10" y1="50" x2="18" y2="78"/>
+            </g>
+            <g transform="translate(190 55)">
+              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
+              <line x1="10" y1="16" x2="10" y2="50"/>
+              <line x1="10" y1="22" x2="24" y2="14" stroke="var(--xp)"/>
+              <path d="M22 10 Q28 22 22 34" stroke="var(--xp)"/>
+              <line x1="10" y1="22" x2="-2" y2="32"/>
+              <line x1="10" y1="50" x2="2" y2="78"/>
+              <line x1="10" y1="50" x2="18" y2="78"/>
+            </g>
+            <!-- 中心碰撞火花 -->
+            <g transform="translate(110 100)">
+              <line x1="-12" y1="-8" x2="12" y2="8" stroke="var(--warn)" stroke-width="2"/>
+              <line x1="12" y1="-8" x2="-12" y2="8" stroke="var(--cyan)" stroke-width="2"/>
+              <circle cx="0" cy="0" r="6" fill="var(--warn)" opacity="0.6"/>
+              <circle cx="0" cy="0" r="3" fill="var(--warn-hi)"/>
+            </g>
+          </g>
+        </symbol>
+      </defs>
+    </svg>
+
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a href="/" class="brand">
+          <svg class="brand-mark"><use href="#brand-mark"/></svg>
+          <span>Agent Battle</span>
+          <span class="brand-sub">· Free-for-all</span>
+        </a>
+        <nav>
+          <a href="/admin.html" class="nav-link">Mission Control</a>
+        </nav>
+      </div>
+    </header>
+
+    <div class="container">
+
+      <!-- 列表视图 -->
+      <main v-if="!activeArena">
+
+        <section class="hero">
+          <div class="hero-row">
+            <div class="hero-illu">
+              <svg viewBox="0 0 220 160" style="color: var(--ink-2);">
+                <use href="#battle-scene"/>
+              </svg>
+            </div>
+            <div class="hero-content">
+              <span class="hero-eyebrow">Multi-Agent Combat Arena</span>
+              <h1 class="hero-title">让一群 <em>Agent</em> 互相开嘴炮。</h1>
+              <p class="hero-desc">
+                给定一个主题,3-7 个 Agent 按你<strong>指定</strong>或<strong>随机洗牌</strong>顺序自由发言。
+                可以互相 @ 引用 / 攻击 / 赞同。末轮投票,得票最多者封 <strong style="color: var(--warn)">最具说服力</strong>。
+              </p>
+              <div class="hero-actions">
+                <button class="btn btn-primary" @click="openCreate">⚔ 开战</button>
+                <span class="counter">已记录 <strong>{{ arenas.length }}</strong> 场战役</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Empty -->
+        <div v-if="arenas.length === 0" class="empty">
+          <svg class="empty-icon" width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="30" cy="30" r="20"/>
+            <line x1="20" y1="20" x2="40" y2="40"/>
+            <line x1="40" y1="20" x2="20" y2="40"/>
+          </svg>
+          还没有战役。叫上 N 个 Agent,给他们一个主题,让场面失控。
+        </div>
+
+        <!-- Arena 列表 -->
+        <section v-else>
+          <h2 class="section-h" style="margin-bottom: 14px;">战役墙</h2>
+          <div class="arenav2">
+            <a v-for="(a, i) in arenas" :key="a.id"
+               class="arena-card"
+               @click.prevent="enterArena(a)">
+              <span class="arena-card-status">
+                <span class="tag" :class="'tag-' + a.status">{{ statusLabel(a.status) }}</span>
+              </span>
+              <div class="arena-card-art" style="color: var(--ink-2);">
+                <svg viewBox="0 0 280 90" style="width:100%; height:100%;">
+                  <!-- 4-7 个火柴人随机摆 -->
+                  <g v-pre>
+                    <g v-for="(p, k) in a.participants.slice(0, 5)" :key="k"
+                       :transform="`translate(${20 + k * 55} 0)`">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="28" x2="10" y2="62" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="34" x2="22" y2="30" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="34" x2="-2" y2="42" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="62" x2="2" y2="80" stroke="currentColor" stroke-width="1.5"/>
+                      <line x1="10" y1="62" x2="18" y2="80" stroke="currentColor" stroke-width="1.5"/>
+                    </g>
+                  </g>
+                  <!-- 实际用静态固定 5 个火柴人 -->
+                  <g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round">
+                    <g transform="translate(20 0)">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
+                      <line x1="10" y1="28" x2="10" y2="62"/>
+                      <line x1="10" y1="34" x2="22" y2="28" stroke="var(--warn)"/>
+                      <line x1="10" y1="34" x2="-2" y2="42"/>
+                      <line x1="10" y1="62" x2="2" y2="80"/>
+                      <line x1="10" y1="62" x2="18" y2="80"/>
+                    </g>
+                    <g transform="translate(75 0)">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
+                      <line x1="10" y1="28" x2="10" y2="62"/>
+                      <line x1="10" y1="34" x2="-2" y2="26" stroke="var(--cyan)"/>
+                      <circle cx="-4" cy="24" r="3" fill="var(--cyan)"/>
+                      <line x1="10" y1="34" x2="22" y2="42"/>
+                      <line x1="10" y1="62" x2="2" y2="80"/>
+                      <line x1="10" y1="62" x2="18" y2="80"/>
+                    </g>
+                    <g transform="translate(130 0)">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
+                      <line x1="10" y1="28" x2="10" y2="62"/>
+                      <line x1="10" y1="34" x2="22" y2="30" stroke="var(--red)"/>
+                      <circle cx="24" cy="28" r="3" fill="var(--red)"/>
+                      <line x1="10" y1="34" x2="-2" y2="42"/>
+                      <line x1="10" y1="62" x2="2" y2="80"/>
+                      <line x1="10" y1="62" x2="18" y2="80"/>
+                    </g>
+                    <g transform="translate(185 0)">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
+                      <line x1="10" y1="28" x2="10" y2="62"/>
+                      <line x1="10" y1="34" x2="24" y2="26" stroke="var(--xp)"/>
+                      <path d="M22 22 Q28 32 22 44" stroke="var(--xp)"/>
+                      <line x1="10" y1="34" x2="-2" y2="42"/>
+                      <line x1="10" y1="62" x2="2" y2="80"/>
+                      <line x1="10" y1="62" x2="18" y2="80"/>
+                    </g>
+                    <g transform="translate(240 0)">
+                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
+                      <line x1="10" y1="28" x2="10" y2="62"/>
+                      <line x1="10" y1="34" x2="-4" y2="26" stroke="var(--warn)"/>
+                      <line x1="10" y1="34" x2="22" y2="26" stroke="var(--warn)"/>
+                      <line x1="10" y1="62" x2="2" y2="80"/>
+                      <line x1="10" y1="62" x2="18" y2="80"/>
+                    </g>
+                  </g>
+                </svg>
+              </div>
+              <div class="arena-card-body">
+                <div class="arena-card-num">#{{ String(i + 1).padStart(2, '0') }}</div>
+                <h3 class="arena-card-title">{{ a.title || '（无题）' }}</h3>
+                <p class="arena-card-topic">{{ truncate(a.topic, 90) }}</p>
+                <div class="arena-card-meta">
+                  <span>{{ a.participants.length }} 人</span>
+                  <span>{{ a.rounds_total }} 轮</span>
+                  <span>{{ a.order_mode === 'manual' ? '指定' : '随机' }}</span>
+                  <span>{{ relTime(a.created_at) }}</span>
+                </div>
+              </div>
+            </a>
+          </div>
+        </section>
+      </main>
+
+      <!-- 详情页 -->
+      <main v-else>
+        <a href="/" class="back-link" @click.prevent="leaveArena">← 战役墙</a>
+
+        <header class="detail-head">
+          <div class="detail-head-line">
+            <span class="mono">#{{ String(currentIndex + 1).padStart(2, '0') }}</span>
+            <span>·</span>
+            <span class="tag" :class="'tag-' + activeArena.status">{{ statusLabel(activeArena.status) }}</span>
+            <span>·</span>
+            <span class="mono">第 {{ activeArena.current_round || 0 }} / {{ activeArena.rounds_total }} 轮</span>
+            <span>·</span>
+            <span>{{ activeArena.order_mode === 'manual' ? '指定顺序' : '随机洗牌' }}</span>
+          </div>
+          <h1 class="detail-title">{{ activeArena.title }}</h1>
+          <p class="detail-topic">{{ activeArena.topic }}</p>
+          <div v-if="activeArena.winner" class="winner-block">
+            <svg class="winner-crown"><use href="#crown"/></svg>
+            <span class="label">最具说服力</span>
+            <span class="who">{{ winnerName(activeArena.winner) }}</span>
+          </div>
+        </header>
+
+        <!-- 待开战 CTA -->
+        <div v-if="activeArena.status === 'pending'" style="margin-bottom: 24px;">
+          <button class="btn btn-primary" @click="startArena" :disabled="working">
+            ⚔ 开战
+          </button>
+          <span class="muted tiny" style="margin-left: 12px;">
+            将按 {{ activeArena.order_mode === 'manual' ? '指定' : '随机' }} 顺序派发
+            {{ activeArena.rounds_total }} 轮 × {{ activeArena.participants.length }} 人
+          </span>
+        </div>
+
+        <!-- 战报时间线 -->
+        <h2 class="section-h">战报时间线</h2>
+        <div v-if="rounds.length === 0" class="empty">还没有人上场。</div>
+        <div v-else>
+          <div v-for="r in rounds" :key="r.id" class="round-block">
+            <div class="round-h">
+              <span class="seq">{{ String(r.seq).padStart(2, '0') }}</span>
+              <span>{{ agentName(r.speaker_agent) }}</span>
+              <span v-if="r.reply_to_id" style="color: var(--xp);">· 引用上一条</span>
+              <span class="spacer"></span>
+              <span>{{ roundStatusLabel(r.status) }}</span>
+            </div>
+            <div class="bubble" :class="bubbleClass(r)">
+              <div class="bubble-body" v-html="renderMd(r.response || '')"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 最终评 -->
+        <div v-if="verdict" style="margin-top: 32px;">
+          <h2 class="section-h">最终战报</h2>
+          <div class="bubble">
+            <pre style="white-space: pre-wrap; font-family: inherit; margin: 0; color: var(--ink);">{{ verdict }}</pre>
+          </div>
+        </div>
+
+        <!-- 参战者(角色卡) -->
+        <h2 class="section-h" style="margin-top: 32px;">参战者</h2>
+        <div class="participants">
+          <div v-for="(p, idx) in activeArena.participants" :key="p"
+               class="participant"
+               :class="{ 'is-winner': isWinner(p) }">
+            <div class="participant-art" :style="{ color: figureColor(idx) }">
+              <svg><use :href="figureFor(idx)"/></svg>
+            </div>
+            <div class="participant-head">
+              <span class="participant-num">#{{ String(idx + 1).padStart(2, '0') }}</span>
+              <span class="participant-name">{{ agentName(p) }}</span>
+            </div>
+            <div class="participant-persona">{{ agentPersona(p) || '—' }}</div>
+            <div class="hp-bar">
+              <span class="hp-label">票</span>
+              <div class="hp-track">
+                <div class="hp-fill" :style="{ width: hpWidth(tally[p] || 0, maxTally) + '%' }"></div>
+              </div>
+              <span class="hp-num">{{ tally[p] || 0 }}</span>
+            </div>
+            <button v-if="canVote && p !== currentVoterId"
+                    class="participant-vote"
+                    @click="castVote(p)" :disabled="working">
+              投它
+            </button>
+            <div v-else-if="p === currentVoterId" class="participant-vote is-self">你</div>
+            <div v-else-if="hasVoted" class="participant-vote is-done">已投</div>
+          </div>
+        </div>
+
+        <div v-if="activeArena.status === 'voting' || activeArena.status === 'finished'"
+             style="margin-top: 16px; font-size: 13px; color: var(--ink-2);">
+          投票进度: {{ votes.length }} / {{ activeArena.participants.length }}
+          <span v-if="voteMsg"> — {{ voteMsg }}</span>
+        </div>
+      </main>
+    </div>
+
+    <!-- 开战 Modal -->
+    <div v-if="showCreate" class="modal-mask" @click.self="closeCreate">
+      <div class="modal">
+        <h2 class="modal-h">⚔ 开战</h2>
+        <p class="modal-sub">给一帮 Agent 一个主题,让它们吵起来</p>
+
+        <label class="field">
+          <span class="field-label">① 战报标题</span>
+          <input v-model="form.title" maxlength="80" placeholder="一句话标题,例:AI 是否应替代人类决策" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">② 主题</span>
+          <textarea v-model="form.topic" maxlength="500" rows="3" placeholder="这场团战要讨论什么"></textarea>
+        </label>
+
+        <label class="field">
+          <span class="field-label">③ 参战 Agent(2-7 人)</span>
+          <div class="chip-grid">
+            <button v-for="(a, i) in agents" :key="a.id"
+                    type="button"
+                    class="chip"
+                    :class="{ 'is-on': form.participants.includes(a.id) }"
+                    @click="toggleParticipant(a.id)">
+              <span class="chip-num">{{ form.participants.includes(a.id) ? (form.participants.indexOf(a.id) + 1) : '·' }}</span>
+              <span class="chip-name">{{ a.name }}</span>
+            </button>
+            <span v-if="agents.length === 0" class="chip-empty">还没有 Agent,请先在 Mission Control 接入</span>
+          </div>
+        </label>
+
+        <label class="field">
+          <span class="field-label">④ 轮次</span>
+          <div class="seg">
+            <button type="button" class="seg-btn" :class="{ 'is-on': form.rounds_total === 3 }" @click="form.rounds_total = 3">3 轮(极速)</button>
+            <button type="button" class="seg-btn" :class="{ 'is-on': form.rounds_total === 5 }" @click="form.rounds_total = 5">5 轮(标准)</button>
+          </div>
+        </label>
+
+        <label class="field">
+          <span class="field-label">⑤ 发言顺序</span>
+          <div class="seg">
+            <button type="button" class="seg-btn" :class="{ 'is-on': form.order_mode === 'random' }" @click="setOrderMode('random')">🎲 随机洗牌</button>
+            <button type="button" class="seg-btn" :class="{ 'is-on': form.order_mode === 'manual' }" @click="setOrderMode('manual')" :disabled="form.participants.length < 2">📋 我来指定</button>
+          </div>
+        </label>
+
+        <div v-if="form.order_mode === 'manual' && form.manual_order.length > 0" class="order-list" style="margin-top: 8px;">
+          <div v-for="(pid, i) in form.manual_order" :key="pid" class="order-item">
+            <span class="order-idx">{{ i + 1 }}</span>
+            <span class="order-name">{{ agentName(pid) }}</span>
+            <div class="order-actions">
+              <button type="button" class="order-btn" :disabled="i === 0" @click="moveOrder(i, -1)">↑</button>
+              <button type="button" class="order-btn" :disabled="i === form.manual_order.length - 1" @click="moveOrder(i, 1)">↓</button>
+              <button type="button" class="order-btn" @click="removeFromOrder(i)">×</button>
+            </div>
+          </div>
+        </div>
+
+        <p v-if="createError" class="form-error">{{ createError }}</p>
+
+        <div class="modal-actions">
+          <button class="btn" @click="closeCreate">取消</button>
+          <button class="btn btn-primary" :disabled="working || !canCreate" @click="createArena">⚔ 拉开战幕</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/arena.js"></script>
+</body>
+</html>

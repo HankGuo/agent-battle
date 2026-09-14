@@ -1,0 +1,14 @@
+attachments/
+*.db
+*.db-shm
+*.db-wal
+agent-matrix
+agent-matrix-dev
+.DS_Store
+宣传/
+
+# 本地 AI 助手上下文，不入库
+AGENTS.md
+
+# 本地设计选型中间物料，不入库
+design-previews/
