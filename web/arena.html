@@ -12,177 +12,108 @@
 <body>
   <div id="app" v-cloak>
 
-    <!-- ════════ SVG Sprites(复用的火柴人 / 武器)═══════ -->
+    <!-- ════════ 手绘风格 SVG 资源库(只放点缀用的几个)═══════ -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
       <defs>
-        <!-- 火柴人 - 持剑 -->
-        <symbol id="fig-sword" viewBox="0 0 60 80">
-          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
-            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <line x1="30" y1="21" x2="30" y2="52"/>
-            <line x1="30" y1="28" x2="50" y2="22"/>
-            <line x1="50" y1="22" x2="56" y2="14"/>
-            <line x1="56" y1="14" x2="58" y2="16"/>
-            <line x1="56" y1="14" x2="52" y2="18"/>
-            <line x1="30" y1="28" x2="14" y2="40"/>
-            <line x1="30" y1="52" x2="20" y2="76"/>
-            <line x1="30" y1="52" x2="40" y2="76"/>
-            <!-- 剑刃光 -->
-            <line x1="50" y1="22" x2="56" y2="14" stroke="var(--warn)" stroke-width="2.5"/>
-          </g>
-        </symbol>
+        <!-- 全局"手抖"滤镜:让所有 SVG 看起来像草稿纸上的手绘 -->
+        <filter id="sketch" x="-5%" y="-5%" width="110%" height="110%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.025" numOctaves="2" seed="3" result="noise"/>
+          <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.5"/>
+        </filter>
 
-        <!-- 火柴人 - 持法杖 -->
-        <symbol id="fig-staff" viewBox="0 0 60 80">
-          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
-            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <line x1="30" y1="21" x2="30" y2="52"/>
-            <line x1="30" y1="28" x2="14" y2="40"/>
-            <line x1="30" y1="28" x2="20" y2="8"/>
-            <circle cx="20" cy="6" r="4" fill="var(--cyan)" stroke="var(--cyan)"/>
-            <circle cx="20" cy="6" r="2" fill="var(--bg)"/>
-            <line x1="30" y1="52" x2="20" y2="76"/>
-            <line x1="30" y1="52" x2="40" y2="76"/>
-          </g>
-        </symbol>
-
-        <!-- 火柴人 - 持盾 -->
-        <symbol id="fig-shield" viewBox="0 0 60 80">
-          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
-            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <line x1="30" y1="21" x2="30" y2="52"/>
-            <line x1="30" y1="28" x2="48" y2="30"/>
-            <!-- 盾 -->
-            <path d="M48 24 L56 28 L56 42 L48 46 Z" fill="var(--warn)" stroke="var(--warn-hi)"/>
-            <line x1="48" y1="28" x2="56" y2="42" stroke="var(--bg)" stroke-width="1"/>
-            <line x1="30" y1="28" x2="12" y2="40"/>
-            <line x1="30" y1="52" x2="20" y2="76"/>
-            <line x1="30" y1="52" x2="40" y2="76"/>
-          </g>
-        </symbol>
-
-        <!-- 火柴人 - 持弓 -->
-        <symbol id="fig-bow" viewBox="0 0 60 80">
-          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
-            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <line x1="30" y1="21" x2="30" y2="52"/>
-            <line x1="30" y1="28" x2="12" y2="40"/>
-            <!-- 弓 -->
-            <path d="M44 22 Q52 35 44 48" stroke="var(--xp)" stroke-width="2"/>
-            <line x1="44" y1="22" x2="44" y2="48" stroke="var(--ink-2)" stroke-width="0.5"/>
-            <line x1="30" y1="52" x2="20" y2="76"/>
-            <line x1="30" y1="52" x2="40" y2="76"/>
-          </g>
-        </symbol>
-
-        <!-- 火柴人 - 双拳 -->
-        <symbol id="fig-fist" viewBox="0 0 60 80">
-          <g stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="30" cy="14" r="7" fill="#1F1F1F"/>
-            <circle cx="27" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <circle cx="33" cy="13" r="1.5" fill="currentColor" stroke="none"/>
-            <line x1="30" y1="21" x2="30" y2="52"/>
-            <line x1="30" y1="28" x2="14" y2="22"/>
-            <line x1="30" y1="28" x2="46" y2="22"/>
-            <circle cx="12" cy="20" r="4" fill="var(--red)" stroke="var(--red)"/>
-            <circle cx="48" cy="20" r="4" fill="var(--red)" stroke="var(--red)"/>
-            <line x1="30" y1="52" x2="20" y2="76"/>
-            <line x1="30" y1="52" x2="40" y2="76"/>
-          </g>
-        </symbol>
-
-        <!-- 皇冠 -->
-        <symbol id="crown" viewBox="0 0 24 24">
-          <g fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linejoin="round">
-            <path d="M3 8 L7 14 L12 6 L17 14 L21 8 L20 19 L4 19 Z"/>
-            <circle cx="3" cy="8" r="1.5"/>
-            <circle cx="12" cy="6" r="1.5"/>
-            <circle cx="21" cy="8" r="1.5"/>
-            <circle cx="3" cy="19" r="1"/>
-            <circle cx="9" cy="19" r="1"/>
-            <circle cx="15" cy="19" r="1"/>
-            <circle cx="21" cy="19" r="1"/>
-          </g>
-        </symbol>
-
-        <!-- 交叉双剑 logo -->
+        <!-- Logo:歪斜交叉双剑(手绘) -->
         <symbol id="brand-mark" viewBox="0 0 32 32">
-          <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="6" y1="6" x2="22" y2="22" stroke="var(--warn)"/>
-            <line x1="6" y1="6" x2="10" y2="4" stroke="var(--warn)"/>
-            <line x1="6" y1="6" x2="4" y2="10" stroke="var(--warn)"/>
-            <line x1="22" y1="22" x2="26" y2="24" stroke="var(--warn)"/>
-            <line x1="22" y1="22" x2="24" y2="18" stroke="var(--warn)"/>
-            <line x1="6" y1="10" x2="10" y2="6" stroke="var(--warn)"/>
-            <line x1="22" y1="18" x2="26" y2="22" stroke="var(--warn)"/>
-            <line x1="26" y1="6" x2="10" y2="22" stroke="var(--cyan)"/>
-            <line x1="26" y1="6" x2="22" y2="4" stroke="var(--cyan)"/>
-            <line x1="26" y1="6" x2="28" y2="10" stroke="var(--cyan)"/>
-            <line x1="10" y1="22" x2="6" y2="24" stroke="var(--cyan)"/>
-            <line x1="10" y1="22" x2="8" y2="18" stroke="var(--cyan)"/>
-            <line x1="26" y1="10" x2="22" y2="6" stroke="var(--cyan)"/>
-            <line x1="10" y1="18" x2="6" y2="22" stroke="var(--cyan)"/>
+          <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)">
+            <!-- 左剑(橙黄) - 歪斜 -->
+            <path d="M7 4 L23 22" stroke="var(--warn)"/>
+            <path d="M7 4 L11 3 M7 4 L5 8" stroke="var(--warn)"/>
+            <path d="M23 22 L26 23 M23 22 L24 19" stroke="var(--warn)"/>
+            <!-- 剑身草稿线 -->
+            <path d="M8 6 L21 20" stroke="var(--warn)" opacity="0.4" stroke-dasharray="2 2"/>
+            <!-- 右剑(电光蓝) - 歪斜 -->
+            <path d="M25 4 L9 22" stroke="var(--cyan)"/>
+            <path d="M25 4 L29 5 M25 4 L27 1" stroke="var(--cyan)"/>
+            <path d="M9 22 L6 23 M9 22 L11 19" stroke="var(--cyan)"/>
+            <path d="M24 5 L10 20" stroke="var(--cyan)" opacity="0.4" stroke-dasharray="2 2"/>
+            <!-- 中心碰撞火花 -->
+            <circle cx="16" cy="13" r="1.5" fill="var(--warn)"/>
           </g>
         </symbol>
 
-        <!-- 4v4 战斗场景(Hero) -->
-        <symbol id="battle-scene" viewBox="0 0 220 160">
-          <g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-            <!-- 地面线 -->
-            <line x1="10" y1="130" x2="210" y2="130" stroke="var(--ink-3)" stroke-width="1" stroke-dasharray="4 4"/>
-            <!-- 左队 4 个 -->
-            <g transform="translate(15 50)">
-              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
-              <line x1="10" y1="16" x2="10" y2="50"/>
-              <line x1="10" y1="22" x2="22" y2="18" stroke="var(--warn)"/>
-              <line x1="22" y1="18" x2="28" y2="12" stroke="var(--warn)" stroke-width="2"/>
-              <line x1="10" y1="22" x2="-2" y2="32"/>
-              <line x1="10" y1="50" x2="2" y2="78"/>
-              <line x1="10" y1="50" x2="18" y2="78"/>
-            </g>
-            <g transform="translate(40 55)">
-              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
-              <line x1="10" y1="16" x2="10" y2="50"/>
-              <line x1="10" y1="22" x2="-4" y2="14" stroke="var(--cyan)"/>
-              <circle cx="-6" cy="12" r="3" fill="var(--cyan)"/>
-              <line x1="10" y1="22" x2="22" y2="32"/>
-              <line x1="10" y1="50" x2="2" y2="78"/>
-              <line x1="10" y1="50" x2="18" y2="78"/>
-            </g>
-            <!-- 右队 4 个 -->
-            <g transform="translate(160 50)">
-              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
-              <line x1="10" y1="16" x2="10" y2="50"/>
-              <line x1="10" y1="22" x2="-2" y2="18" stroke="var(--red)"/>
-              <circle cx="-4" cy="16" r="3" fill="var(--red)"/>
-              <line x1="10" y1="22" x2="22" y2="32"/>
-              <line x1="10" y1="50" x2="2" y2="78"/>
-              <line x1="10" y1="50" x2="18" y2="78"/>
-            </g>
-            <g transform="translate(190 55)">
-              <circle cx="10" cy="10" r="6" fill="#1F1F1F"/>
-              <line x1="10" y1="16" x2="10" y2="50"/>
-              <line x1="10" y1="22" x2="24" y2="14" stroke="var(--xp)"/>
-              <path d="M22 10 Q28 22 22 34" stroke="var(--xp)"/>
-              <line x1="10" y1="22" x2="-2" y2="32"/>
-              <line x1="10" y1="50" x2="2" y2="78"/>
-              <line x1="10" y1="50" x2="18" y2="78"/>
-            </g>
-            <!-- 中心碰撞火花 -->
-            <g transform="translate(110 100)">
-              <line x1="-12" y1="-8" x2="12" y2="8" stroke="var(--warn)" stroke-width="2"/>
-              <line x1="12" y1="-8" x2="-12" y2="8" stroke="var(--cyan)" stroke-width="2"/>
-              <circle cx="0" cy="0" r="6" fill="var(--warn)" opacity="0.6"/>
-              <circle cx="0" cy="0" r="3" fill="var(--warn-hi)"/>
-            </g>
+        <!-- Hero 火柴人(手绘风,挥剑) -->
+        <symbol id="hero-sketch" viewBox="0 0 200 140">
+          <g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)">
+            <!-- 头部 - 不规则圆 -->
+            <path d="M85 28 Q82 22 88 19 Q95 17 99 21 Q103 25 100 32 Q97 36 90 36 Q85 34 85 28 Z"/>
+            <!-- 眼睛(两小点) -->
+            <circle cx="90" cy="26" r="0.8" fill="currentColor"/>
+            <circle cx="96" cy="26" r="0.8" fill="currentColor"/>
+            <!-- 嘴(歪斜) -->
+            <path d="M89 31 L96 30"/>
+            <!-- 脖子 → 身体(歪斜) -->
+            <path d="M92 36 L93 44 L91 78"/>
+            <!-- 左臂(向后,抬武器) - 弯曲 -->
+            <path d="M92 46 Q105 40 118 28"/>
+            <!-- 剑(从手上到剑尖) - 歪斜 -->
+            <path d="M118 28 L138 8 L142 12 L122 32 Z" fill="var(--warn)" fill-opacity="0.15"/>
+            <path d="M138 8 L142 12" stroke="var(--warn)" stroke-width="2.2"/>
+            <!-- 剑柄横 -->
+            <path d="M132 16 L130 18 M146 4 L148 2" stroke="var(--warn)"/>
+            <!-- 右臂(自然下垂) -->
+            <path d="M91 50 Q82 62 78 76"/>
+            <!-- 腿(分开) -->
+            <path d="M91 78 L85 116"/>
+            <path d="M91 78 L102 118"/>
+            <!-- 脚(歪斜) -->
+            <path d="M85 116 L80 119 M85 116 L90 119"/>
+            <path d="M102 118 L98 121 M102 118 L107 121"/>
+            <!-- 站位地面虚线(草稿) -->
+            <path d="M50 122 L75 122" stroke-dasharray="3 3" opacity="0.4"/>
+            <path d="M110 122 L160 122" stroke-dasharray="3 3" opacity="0.4"/>
+            <!-- 剑光轨迹(草稿) -->
+            <path d="M122 32 Q132 22 145 14" stroke="var(--warn)" opacity="0.5" stroke-dasharray="2 3"/>
+            <!-- 旁注箭头(像手稿标注) -->
+            <path d="M30 22 L70 28" stroke="var(--ink-3)" stroke-width="0.8" opacity="0.5"/>
+            <path d="M70 28 L66 26 M70 28 L67 31" stroke="var(--ink-3)" stroke-width="0.8" opacity="0.5"/>
+            <text x="8" y="20" font-family="Caveat, cursive" font-size="14" fill="var(--ink-3)" opacity="0.7">fighter</text>
+          </g>
+        </symbol>
+
+        <!-- 小火柴人(arena 卡片装饰用) - 单姿势 -->
+        <symbol id="tiny-fighter" viewBox="0 0 40 60">
+          <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)">
+            <path d="M18 10 Q16 7 19 5 Q23 4 24 8 Q24 12 20 13 Q17 12 18 10 Z"/>
+            <circle cx="19" cy="8" r="0.6" fill="currentColor"/>
+            <circle cx="22" cy="8" r="0.6" fill="currentColor"/>
+            <path d="M20 13 L20 36"/>
+            <path d="M20 18 L31 14" stroke="var(--warn)"/>
+            <path d="M31 14 L34 11" stroke="var(--warn)" stroke-width="1.8"/>
+            <path d="M20 18 L10 25"/>
+            <path d="M20 36 L15 56"/>
+            <path d="M20 36 L26 56"/>
+          </g>
+        </symbol>
+
+        <!-- 手绘皇冠 -->
+        <symbol id="crown-sketch" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)">
+            <path d="M3 9 L7 14 L12 5 L17 14 L21 9 L20 19 L4 19 Z"/>
+            <circle cx="3" cy="9" r="1.2" fill="currentColor"/>
+            <circle cx="12" cy="5" r="1.2" fill="currentColor"/>
+            <circle cx="21" cy="9" r="1.2" fill="currentColor"/>
+            <path d="M5 19 L7 17 M9 19 L11 17 M13 19 L15 17 M17 19 L19 17" opacity="0.5"/>
+          </g>
+        </symbol>
+
+        <!-- 手绘骰子(开战按钮旁用) -->
+        <symbol id="dice-sketch" viewBox="0 0 24 24">
+          <g fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" filter="url(#sketch)">
+            <path d="M4 6 L12 3 L20 6 L20 18 L12 21 L4 18 Z"/>
+            <circle cx="12" cy="12" r="1.5" fill="currentColor"/>
+            <circle cx="8" cy="9" r="1" fill="currentColor"/>
+            <circle cx="16" cy="15" r="1" fill="currentColor"/>
+            <circle cx="8" cy="15" r="1" fill="currentColor"/>
+            <circle cx="16" cy="9" r="1" fill="currentColor"/>
           </g>
         </symbol>
       </defs>
@@ -209,9 +140,9 @@
 
         <section class="hero">
           <div class="hero-row">
-            <div class="hero-illu">
-              <svg viewBox="0 0 220 160" style="color: var(--ink-2);">
-                <use href="#battle-scene"/>
+            <div class="hero-illu" style="color: var(--ink-2);">
+              <svg viewBox="0 0 200 140" style="width: 100%; height: 100%;">
+                <use href="#hero-sketch"/>
               </svg>
             </div>
             <div class="hero-content">
@@ -222,7 +153,10 @@
                 可以互相 @ 引用 / 攻击 / 赞同。末轮投票,得票最多者封 <strong style="color: var(--warn)">最具说服力</strong>。
               </p>
               <div class="hero-actions">
-                <button class="btn btn-primary" @click="openCreate">⚔ 开战</button>
+                <button class="btn btn-primary" @click="openCreate">
+                  <svg width="14" height="14" style="vertical-align: -2px; margin-right: 4px;"><use href="#dice-sketch"/></svg>
+                  开战
+                </button>
                 <span class="counter">已记录 <strong>{{ arenas.length }}</strong> 场战役</span>
               </div>
             </div>
@@ -231,10 +165,9 @@
 
         <!-- Empty -->
         <div v-if="arenas.length === 0" class="empty">
-          <svg class="empty-icon" width="60" height="60" viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="2">
-            <circle cx="30" cy="30" r="20"/>
-            <line x1="20" y1="20" x2="40" y2="40"/>
-            <line x1="40" y1="20" x2="20" y2="40"/>
+          <svg class="empty-icon" width="48" height="48" viewBox="0 0 60 60" fill="none" stroke="currentColor" stroke-width="1.6" filter="url(#sketch)">
+            <path d="M10 30 Q12 12 30 10 Q48 12 50 30 Q48 48 30 50 Q12 48 10 30 Z"/>
+            <path d="M22 22 L38 38 M38 22 L22 38"/>
           </svg>
           还没有战役。叫上 N 个 Agent,给他们一个主题,让场面失控。
         </div>
@@ -249,66 +182,10 @@
               <span class="arena-card-status">
                 <span class="tag" :class="'tag-' + a.status">{{ statusLabel(a.status) }}</span>
               </span>
-              <div class="arena-card-art" style="color: var(--ink-2);">
-                <svg viewBox="0 0 280 90" style="width:100%; height:100%;">
-                  <!-- 4-7 个火柴人随机摆 -->
-                  <g v-pre>
-                    <g v-for="(p, k) in a.participants.slice(0, 5)" :key="k"
-                       :transform="`translate(${20 + k * 55} 0)`">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F" stroke="currentColor" stroke-width="1.5"/>
-                      <line x1="10" y1="28" x2="10" y2="62" stroke="currentColor" stroke-width="1.5"/>
-                      <line x1="10" y1="34" x2="22" y2="30" stroke="currentColor" stroke-width="1.5"/>
-                      <line x1="10" y1="34" x2="-2" y2="42" stroke="currentColor" stroke-width="1.5"/>
-                      <line x1="10" y1="62" x2="2" y2="80" stroke="currentColor" stroke-width="1.5"/>
-                      <line x1="10" y1="62" x2="18" y2="80" stroke="currentColor" stroke-width="1.5"/>
-                    </g>
-                  </g>
-                  <!-- 实际用静态固定 5 个火柴人 -->
-                  <g stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round">
-                    <g transform="translate(20 0)">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
-                      <line x1="10" y1="28" x2="10" y2="62"/>
-                      <line x1="10" y1="34" x2="22" y2="28" stroke="var(--warn)"/>
-                      <line x1="10" y1="34" x2="-2" y2="42"/>
-                      <line x1="10" y1="62" x2="2" y2="80"/>
-                      <line x1="10" y1="62" x2="18" y2="80"/>
-                    </g>
-                    <g transform="translate(75 0)">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
-                      <line x1="10" y1="28" x2="10" y2="62"/>
-                      <line x1="10" y1="34" x2="-2" y2="26" stroke="var(--cyan)"/>
-                      <circle cx="-4" cy="24" r="3" fill="var(--cyan)"/>
-                      <line x1="10" y1="34" x2="22" y2="42"/>
-                      <line x1="10" y1="62" x2="2" y2="80"/>
-                      <line x1="10" y1="62" x2="18" y2="80"/>
-                    </g>
-                    <g transform="translate(130 0)">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
-                      <line x1="10" y1="28" x2="10" y2="62"/>
-                      <line x1="10" y1="34" x2="22" y2="30" stroke="var(--red)"/>
-                      <circle cx="24" cy="28" r="3" fill="var(--red)"/>
-                      <line x1="10" y1="34" x2="-2" y2="42"/>
-                      <line x1="10" y1="62" x2="2" y2="80"/>
-                      <line x1="10" y1="62" x2="18" y2="80"/>
-                    </g>
-                    <g transform="translate(185 0)">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
-                      <line x1="10" y1="28" x2="10" y2="62"/>
-                      <line x1="10" y1="34" x2="24" y2="26" stroke="var(--xp)"/>
-                      <path d="M22 22 Q28 32 22 44" stroke="var(--xp)"/>
-                      <line x1="10" y1="34" x2="-2" y2="42"/>
-                      <line x1="10" y1="62" x2="2" y2="80"/>
-                      <line x1="10" y1="62" x2="18" y2="80"/>
-                    </g>
-                    <g transform="translate(240 0)">
-                      <circle cx="10" cy="22" r="6" fill="#1F1F1F"/>
-                      <line x1="10" y1="28" x2="10" y2="62"/>
-                      <line x1="10" y1="34" x2="-4" y2="26" stroke="var(--warn)"/>
-                      <line x1="10" y1="34" x2="22" y2="26" stroke="var(--warn)"/>
-                      <line x1="10" y1="62" x2="2" y2="80"/>
-                      <line x1="10" y1="62" x2="18" y2="80"/>
-                    </g>
-                  </g>
+              <!-- 点缀:角落小火柴人 -->
+              <div class="arena-card-sketch" style="color: var(--ink-3);">
+                <svg viewBox="0 0 40 60" style="width: 100%; height: 100%;">
+                  <use href="#tiny-fighter"/>
                 </svg>
               </div>
               <div class="arena-card-body">
@@ -344,7 +221,7 @@
           <h1 class="detail-title">{{ activeArena.title }}</h1>
           <p class="detail-topic">{{ activeArena.topic }}</p>
           <div v-if="activeArena.winner" class="winner-block">
-            <svg class="winner-crown"><use href="#crown"/></svg>
+            <svg class="winner-crown"><use href="#crown-sketch"/></svg>
             <span class="label">最具说服力</span>
             <span class="who">{{ winnerName(activeArena.winner) }}</span>
           </div>
@@ -353,7 +230,8 @@
         <!-- 待开战 CTA -->
         <div v-if="activeArena.status === 'pending'" style="margin-bottom: 24px;">
           <button class="btn btn-primary" @click="startArena" :disabled="working">
-            ⚔ 开战
+            <svg width="14" height="14" style="vertical-align: -2px; margin-right: 4px;"><use href="#dice-sketch"/></svg>
+            开战
           </button>
           <span class="muted tiny" style="margin-left: 12px;">
             将按 {{ activeArena.order_mode === 'manual' ? '指定' : '随机' }} 顺序派发
@@ -393,8 +271,10 @@
           <div v-for="(p, idx) in activeArena.participants" :key="p"
                class="participant"
                :class="{ 'is-winner': isWinner(p) }">
-            <div class="participant-art" :style="{ color: figureColor(idx) }">
-              <svg><use :href="figureFor(idx)"/></svg>
+            <div class="participant-art" style="color: var(--ink-2);">
+              <svg viewBox="0 0 40 60">
+                <use href="#tiny-fighter"/>
+              </svg>
             </div>
             <div class="participant-head">
               <span class="participant-num">#{{ String(idx + 1).padStart(2, '0') }}</span>

@@ -296,10 +296,6 @@ createApp({
     onBeforeUnmount(() => { if (es) es.close(); });
 
     // ──────── 角色卡 / HP / 战报分类 ────────
-    const FIGURES = ['#fig-sword', '#fig-staff', '#fig-shield', '#fig-bow', '#fig-fist'];
-    const FIGURE_COLORS = ['var(--warn)', 'var(--cyan)', 'var(--xp)', 'var(--warn-hi)', 'var(--red)'];
-    function figureFor(idx) { return FIGURES[idx % FIGURES.length]; }
-    function figureColor(idx) { return FIGURE_COLORS[idx % FIGURE_COLORS.length]; }
     const maxTally = computed(() => {
       const ts = Object.values(tally.value || {});
       return ts.length ? Math.max(...ts, 1) : 1;
@@ -319,7 +315,7 @@ createApp({
       showCreate, createError, form, working, voteMsg, modalTilt, canCreate, canVote, currentVoterId, hasVoted,
       statusLabel, roundStatusLabel, speakerIndex, speakerRole, agentName, agentPersona,
       winnerName, isWinner, relTime, truncate, renderMd,
-      figureFor, figureColor, hpWidth, maxTally, bubbleClass,
+      hpWidth, maxTally, bubbleClass,
       loadArenas, enterArena, leaveArena, startArena, castVote,
       openCreate, closeCreate, createArena, toggleParticipant, setOrderMode, moveOrder, removeFromOrder,
     };
