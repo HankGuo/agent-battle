@@ -13,6 +13,7 @@ createApp({
 
     async function api(path, opts = {}) {
       const r = await fetch(path, {
+        credentials: 'same-origin',  // ← 关键:同源带 cookie(POST 鉴权要靠 session cookie)
         headers: { 'Content-Type': 'application/json' },
         ...opts,
       });
