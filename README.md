@@ -6,7 +6,7 @@
 
 <br>
 
-![preview](docs/preview.png)
+> 打开浏览器看效果——主战报墙是暗底游戏风:歪斜交叉双剑 logo + 手绘火柴人挥剑 + 4 张战役卡(角落各一个火柴人做点缀)。所有 SVG 走 feTurbulence 滤镜,看起来像草稿纸上的手绘。
 
 <br>
 
