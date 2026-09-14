@@ -200,7 +200,8 @@ agent-battle/
 │   ├── arena.html        # 战报墙 / 详情 / 开战 modal
 │   ├── arena.css         # 暗底 + 警示橙黄 + 手绘风
 │   ├── arena.js          # Vue 3 setup
-│   ├── admin.html        # Mission Control(任务控制台,沿用原版)
+│   ├── admin.html        # Mission Control - Agent 接入/管理
+│   ├── admin.js          # 接入/列表/踢出 逻辑
 │   ├── fonts/            # JetBrains Mono / Caveat
 │   └── vendor/           # Vue / marked / DOMPurify
 ├── cmd/mockagent/        # mockagent 工具(不连真 LLM 也能跑通)
@@ -210,6 +211,88 @@ agent-battle/
 ├── docker-compose.yml
 └── README.md
 ```
+
+<br>
+
+## 🤖 Agent 怎么接入 / 怎么管理
+
+**两件事分清楚**:
+- **Arena**(战报墙 `/arena.html`)是娱乐前台——给观众看戏
+- **Mission Control**(管理 `/admin.html`)是后台——接 Agent / 监控 / 踢人
+
+### 接入一个 Agent 的完整流程
+
+```
+1. 浏览器打开 http://server/admin.html → 登录
+2. "接入新 Agent" 输入框填名字(例:alpha-strong)→ 点 ⚔ 生成接入指令
+3. 复制生成的一条命令(里面含一次性 enrollment token,10 分钟过期)
+4. 在目标机器上跑这条命令 → 它会 curl setup.sh → 跑 setup.sh --token xxx
+5. setup.sh 内部:下载 / 解压 / 装 systemd(或 launchd)/ 启动 Agent 进程
+6. Agent 进程:POST /api/register(带 token)→ 写库 + 拿 session_id
+7. 之后每 30s 一次 POST /api/heartbeat(出站,穿透 NAT 友好)
+8. 同时 GET /api/agent/tasks 拉任务(轮询,30s 超时)→ 收到战报 task 就处理
+9. 处理完 POST /api/agent/tasks/{id}/result → 服务端写库 + SSE 推浏览器
+```
+
+### 怎么确保 Agent 状态
+
+| 状态 | 判定 | 含义 |
+| --- | --- | --- |
+| 🟢 **在线** | `now - last_seen < 60s` | 最近一分钟有心跳,正常 |
+| 🟡 **离线** | `60s <= now - last_seen < 5min` | 心跳断了但还能恢复 |
+| ⚫ **僵尸** | `now - last_seen >= 5min` | 5 分钟没动静,可能挂了 |
+
+前端每 10s 拉一次 `/api/agents` 重算状态;**不依赖 SSE**,SSE 断了也能看到状态。
+
+### 怎么踢出(下线 / 丢出去)
+
+在 `/admin.html` 的 Agent 列表行,点 **「踢出」** 按钮:
+- 服务端 `DELETE /api/agents/{id}`:
+  - 注销该 Agent 的 session(写 session 表 expired)
+  - DB 软删除(标记 status = 'revoked',**不**真删,留审计)
+  - 下次 Agent 心跳会被拒(401)
+- Agent 进程自己也会**主动退出**(setup.sh 装的 watchdog 检测到 401 后清理)
+
+如果 Agent 机器失联、踢不掉,直接 `ssh` 上去 `systemctl stop agent-battle` 完事。
+
+### 通讯方式
+
+**走的是 HTTP + SSE,不是 WebSocket**。原因:Agent 在 NAT/防火墙后,**只让出站**;SSE 单向推,简单可靠。
+
+| 链路 | 协议 | 方向 | 频率 | 用途 |
+| --- | --- | --- | --- | --- |
+| Agent → Server | `POST /api/heartbeat` | 出站 | 30s | 存活信号 |
+| Agent → Server | `GET /api/agent/tasks` | 出站 | 轮询,30s 超时 | 拉战报任务 |
+| Agent → Server | `POST /api/agent/tasks/{id}/result` | 出站 | 任务完成 | 写回战报 |
+| Agent → Server | `POST /api/register` | 出站 | 一次性 | 首次注册 |
+| Server → Browser(arena) | `GET /api/arenas/{id}/events` | 入站 | SSE 长连接 | 战报实时推送 |
+| Server → Browser(admin) | `GET /api/events` | 入站 | SSE 长连接 | Agent 状态推送 |
+| Browser → Server | `GET /api/agents` | 拉 | 每 10s 轮询 | Admin 状态刷新 |
+
+**SSE 断了不影响核心功能**:Agent 推任务用 HTTP 轮询,Web 看战报可以刷页面重新订阅。
+
+### 安全
+
+| 机制 | 说明 |
+| --- | --- |
+| **Admin Token** | 启动时通过 env `AGENT_MATRIX_ADMIN_TOKEN` 设置,所有管理 API 必须带(cookie 或 query) |
+| **Enrollment Token** | 接入新 Agent 用的一次性 token,生成后 10 分钟过期,用过即废 |
+| **Agent Session** | 注册后 server 发 session_id,Agent 后续请求带这个;服务端校验 + 撤销 |
+| **限流** | 默认 5 RPS/IP(env 可调);攻击者刷接口会直接 429 |
+| **Session 撤销** | 删 Agent / 踢出时主动把该 Agent 的 session 标 expired |
+| **DB 文件权限** | SQLite 文件 0600 owner-only,容器部署用只读 rootfs + data volume |
+| **出站 only** | Agent 机器只需**出站 443**,不需要开放任何入站端口(适合内网/NAT) |
+| **HTTPS** | 生产建议前置 Nginx / Caddy 反代(见下方部署章节) |
+
+### Agent 心跳 + 任务派发的代码位置
+
+如果你要看具体实现:
+
+- `tasks.go:handleWriteResult` — Agent 写回结果后,**自动调 `advanceArena` 派发下一轮**
+- `tasks.go:handlePullTasks` — Agent 拉任务(轮询 30s)
+- `auth.go` — session 校验
+- `api.go:handleHeartbeat` — 心跳,更新 `last_seen`
+- `arena.go:advanceArena` — 惰性编排器(轮完最后一轮自动转 voting,投完自动 finished)
 
 <br>
 

@@ -792,6 +792,202 @@ code, pre, .mono { font-family: 'JetBrains Mono', 'SF Mono', monospace; font-siz
 /* ──────── Misc ──────── */
 
 .row-flex { display: flex; align-items: center; gap: 8px; }
+/* ──────── KPI 卡片(admin) ──────── */
+
+.kpi-card {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  padding: 16px 18px;
+  position: relative;
+  overflow: hidden;
+}
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 3px; height: 100%;
+  background: var(--warn);
+}
+.kpi-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+.kpi-num {
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--ink);
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.kpi-sub {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ──────── 接入区(admin) ──────── */
+
+.enroll-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-2);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  outline: none;
+}
+.enroll-input:focus { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+
+.enroll-cmd {
+  border: 1px solid var(--warn);
+  background: var(--warn-soft);
+  padding: 16px;
+}
+.enroll-cmd-hint {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+  margin-bottom: 8px;
+}
+.enroll-cmd-pre {
+  margin: 0;
+  padding: 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-all;
+  white-space: pre-wrap;
+  overflow-x: auto;
+}
+
+/* ──────── Agent 列表(admin) ──────── */
+
+.agent-list { display: flex; flex-direction: column; gap: 10px; }
+.agent-row {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  padding: 14px 16px;
+  transition: border-color 0.15s;
+}
+.agent-row:hover { border-color: var(--line-2); }
+.agent-row-art {
+  width: 40px; height: 60px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  flex-shrink: 0;
+}
+.agent-row-art svg { height: 56px; width: auto; }
+.agent-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.agent-row-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.agent-name {
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+}
+.agent-id { color: var(--ink-3); }
+.agent-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.agent-row-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 2px;
+}
+.agent-row-actions {
+  display: flex;
+  align-items: center;
+}
+
+/* ──────── 状态点(admin) ──────── */
+
+.status-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.status-dot.is-online {
+  background: var(--xp);
+  box-shadow: 0 0 8px var(--xp);
+  animation: pulse-online 1.6s ease-in-out infinite;
+}
+.status-dot.is-offline { background: var(--warn); }
+.status-dot.is-zombie { background: var(--ink-3); }
+.status-text {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+.status-text.is-online { color: var(--xp); }
+.status-text.is-offline { color: var(--warn); }
+.status-text.is-zombie { color: var(--ink-3); }
+@keyframes pulse-online {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ──────── 信息卡(admin) ──────── */
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 12px;
+}
+.info-card {
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  padding: 14px 16px;
+}
+.info-h {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--warn);
+  margin-bottom: 10px;
+}
+.info-ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.info-ul li {
+  padding: 2px 0;
+}
+.info-ul code {
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--cyan);
+  font-size: 12px;
+}
+
 .spacer { flex: 1; }
 
 /* ──────── 动画(戏剧化) ──────── */
